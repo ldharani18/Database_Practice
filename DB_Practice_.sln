@@ -1,25 +1,392 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.32112.339
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DB_Practice", "JS_Practice\DB_Practice.csproj", "{87AA6019-F982-452C-B662-38D6BD311628}"
-EndProject
-Global
-	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{87AA6019-F982-452C-B662-38D6BD311628}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{87AA6019-F982-452C-B662-38D6BD311628}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{87AA6019-F982-452C-B662-38D6BD311628}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{87AA6019-F982-452C-B662-38D6BD311628}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {38FA4C43-A117-447D-9D9D-A67452E29872}
-	EndGlobalSection
-EndGlobal
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data.SqlClient;
+using System.Data;
+using Dapper;
+using Z.Dapper.Plus;
+
+namespace DB_Practice
+{
+    public class Student
+    {
+        public int StudentID { get; set; }
+        public string LastName { get; set; }
+        public string FirstName { get; set; }
+        public string Address { get; set; }
+        public string City { get; set; }
+        public int Marks { get; set; }
+        //prop+double tab to define property
+
+    }
+    public class Product
+    {
+        public int ProductID { get; set; }
+        public string ProductName { get; set; }
+        public Category CategoryID { get; set; }
+        public Category CategoryName { get; set; }
+        public Category Category { get; set; }
+    }
+    public class Category
+    {
+        public int CategoryID { get; set; }
+        public string CategoryName { get; set; }
+        public List<Product> Products { get; set; }
+
+    }
+    public class Program
+    {
+        public static List<Student> GenerateStudentList(int count)
+        {
+            var stdList = new List<Student>();
+            string[] names = new string[]{ "Ajay", "Babu", "Catherine", "Dev", "Eve", "Farina", "Gugan", "Harini", "Indhuja","Jack" };
+            for (int i = 0; i < count; i++)
+            {
+                stdList.Add(new Student() { StudentID = (10 + i), FirstName = names[i], LastName = "Khan", Address = " Rajaji Street", City = "CBE", Marks = (i + 70) });
+                
+            }
+            return stdList;
+        }
+        public static void Main(string[] args)
+        {
+            //creating connection string for School Database
+            string ConnectionString = "Server=DHARA-RENTAL;Database=School;User Id=sa;Password=Gandhi@123;";
+
+            //creating connection string for Northwind Database
+            string NW_connection_String = "Server=DHARA-RENTAL;Database=Northwind;User Id=sa;Password=Gandhi@123;";
+
+            SqlConnection sqlConnection = new SqlConnection(ConnectionString);
+
+            SQL_Basics(sqlConnection);
+
+            Query_with_Dapper_and_LINQ(sqlConnection);
+            
+            var async1 = ScalarMethods(ConnectionString);
+            Task.Delay(2000);
+
+            SingleRowSelectingMethods(ConnectionString);
+
+            var async2 = MultipleRowSelectingMethods(ConnectionString);
+            Task.Delay(2000);
+
+            Executing_NonQuery_Method_Using_Dapper(ConnectionString);
+
+            Working_With_Parameters(ConnectionString, sqlConnection);
+
+            Stored_Procedures(sqlConnection);
+
+            Bulk_Insert_And_Bulk_Delete(sqlConnection);
+
+            var async3 = Managing_Relationship(NW_connection_String);
+            Task.Delay(2000);
+
+            Console.Read();
+
+        }
+
+        private static void Bulk_Insert_And_Bulk_Delete(SqlConnection sqlConnection)
+        {
+            Console.ForegroundColor= ConsoleColor.Red;
+            Console.WriteLine("\nBulk_Insert_And_Bulk_Delete\n");
+            //BULK INSERT AND BULK DELETE OPERATIONS
+            var students = GenerateStudentList(10);//generates list of students of length passed in parameter
+            sqlConnection.BulkInsert(students);//adds list of students to table
+            var results = sqlConnection.Query<Student>("select * from Student");
+            foreach (var i in results)
+            {
+                Console.WriteLine(i.FirstName + " ***** " + i.LastName);
+            }
+            sqlConnection.BulkDelete(students);//deletes list of students from the table
+        }
+
+        private static void Stored_Procedures(SqlConnection sqlConnection)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\nStored_Procedures\n");
+            //Executing Stored Procedures
+            Console.WriteLine("\nStored Procedures Execution: ");
+            var sql = "EXEC Procedure_2";//EXEC is used in sql query to execute the stored procedure
+            var res = sqlConnection.Query<Student>(sql).ToList();
+            res.ForEach(r => Console.WriteLine($"{r.FirstName} {r.LastName}"));
+        }
+
+        private static async Task Managing_Relationship(string ConnectionString)
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("\nManaging_Relationship\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                Console.WriteLine("\nMANAGING RELATIONSHIP\n");
+                var sql = "select ProductID,ProductName,p.CategoryID,CategoryName from Products p join categories c on p.CategoryID=c.CategoryID";
+                var res = await connection.QueryAsync<Product, Category, Product>(sql, (product, category) =>
+                  {
+                      product.Category = category;
+                      return product;
+                  }, splitOn: "CategoryID");
+                res.ToList().ForEach(p => Console.WriteLine($"PRODUCTS: {p.ProductName} :{p.} {p.Category.CategoryName}"));
+
+            }
+        }
+        private static void Working_With_Parameters(string ConnectionString, SqlConnection sqlConnection)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("\nWorking_With_Parameters\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                //PARAMETERS AS ANONYMOUS TYPE
+                Console.WriteLine("\nEnter the value of ID whose FirstName and LastName are to be fetched:");
+                int id = Convert.ToInt32(Console.ReadLine());
+                string name=Console.ReadLine();
+               // var obj = new { ID = id };
+                var sql = "select FirstName,LastName from Student where StudentID=@id and FirstName=@name";
+                var result = sqlConnection.QuerySingle(sql, new { name, id });
+                Console.WriteLine("\nParameters as Anonymous Type:");
+                Console.WriteLine($"{result.FirstName} {result.LastName}");
+                
+                //DYNAMIC PARAMETERS
+                var std = new Student { StudentID = 2 };
+                var param = new DynamicParameters(std);
+                sql = "select FirstName,LastName from Student where StudentID=@StudentID";
+                result = sqlConnection.QuerySingle<Student>(sql, std);
+                Console.WriteLine("\nDynamic Parameters:");
+                Console.WriteLine($"{result.FirstName} {result.LastName}");
+
+            }
+        }
+
+        private static void Executing_NonQuery_Method_Using_Dapper(string ConnectionString)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkBlue;
+            Console.WriteLine("\nExecuting_NonQuery_Method_Using_Dapper\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                var sql = "insert into Student(StudentID,LastName,FirstName,[Address],City,Marks) values(8,'Joseph','Vijay','54, Anna Street','Chennai',97)";
+                var result = connection.Execute(sql);//Execute method->returns number of rows affected during insertion/deletion/updation
+                Console.WriteLine("\nAffected Rows during insertion = " + result);
+
+                sql = "update Student set City='Kanyakumari' where StudentID=8";
+                result = connection.Execute(sql);
+                Console.WriteLine("\nAffected Rows during updation = " + result);
+
+                sql = "delete from Student where StudentID=8";
+                result = connection.Execute(sql);
+                Console.WriteLine("\nAffected Rows during deletion = " + result);
+            }
+        }
+
+        private static async Task MultipleRowSelectingMethods(string ConnectionString)
+        {
+            Console.ForegroundColor = ConsoleColor.Blue;
+            Console.WriteLine("\nMultipleRowSelectingMethods\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                var sql = "select * from Student";
+                var res = connection.Query(sql);
+                Console.WriteLine("\nQuery:\n");
+                foreach (var row in res)
+                {
+                    Console.WriteLine($"{row.FirstName} {row.LastName}");
+                }
+
+                res = connection.Query<Student>(sql);
+                Console.WriteLine("\nGeneric Query:\n");
+                foreach (var row in res)
+                {
+                    Console.WriteLine($"{row.FirstName} {row.LastName}");
+                }
+
+                res = await connection.QueryAsync(sql);
+                Console.WriteLine("\nQueryAsync:\n");
+                foreach (var row in res)
+                {
+                    Console.WriteLine($"{row.FirstName} {row.LastName}");
+                }
+
+                res = await connection.QueryAsync<Student>(sql);
+                Console.WriteLine("\nGeneric QueryAsync:\n");
+                foreach (var row in res)
+                {
+                    Console.WriteLine($"{row.FirstName} {row.LastName}");
+                }
+
+            }
+        }
+
+        private static void SingleRowSelectingMethods(string ConnectionString)
+        {
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("\nSingleRowSelectingMethods\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                var sql = "select * from Student where StudentID=5";
+
+                ////QUERYSINGLE
+                //QuerySingle works only to retrieve one data..If more than 1 entry is present/If no entry matches, it throws exception
+                var result_1 = connection.QuerySingle(sql);
+                Console.WriteLine("\nQuerySingle:");
+                Console.WriteLine(result_1.FirstName + " " + result_1.LastName);
+
+                result_1 = connection.QuerySingle<Student>(sql);
+                Console.WriteLine("\nGeneric QuerySingle:");
+                Console.WriteLine(result_1.FirstName + " " + result_1.LastName);
+
+                sql = "select * from Student where StudentID=10";
+
+                ////QUERYSINGLEORDEFAULT
+                ////If no item matches,returns default value. If more than 1 entry matches,throws exception
+                result_1 = connection.QuerySingleOrDefault(sql);
+                Console.WriteLine("\nQuerySingleOrDefault:");
+                if(result_1==null)
+                    Console.WriteLine("Default value returned is null");
+
+                result_1 = connection.QuerySingleOrDefault<Student>(sql);
+                Console.WriteLine("\nGeneric QuerySingleOrDefault:");
+                if (result_1 == null)
+                    Console.WriteLine("Default value returned is null");
+
+                ////QUERYFIRST
+                ////If no item matches,throws an exception..If one/more item matches returns first item.
+                sql = "select * from Student where Marks>80";
+                result_1 = connection.QueryFirst(sql);
+                Console.WriteLine("\nQueryFirst:");
+                Console.WriteLine(result_1.FirstName + " " + result_1.LastName);
+
+                result_1 = connection.QueryFirst<Student>(sql);
+                Console.WriteLine("\nGeneric QueryFirst:");
+                Console.WriteLine(result_1.FirstName + " " + result_1.LastName);
+
+                sql = "select * from Student where Marks<20";
+                ////QUERYFIRSTORDEFAULT
+                ////If no item matches,returns default value..If one/more item matches returns first item.
+                result_1 = connection.QueryFirstOrDefault(sql);
+                Console.WriteLine("\nQueryFirstOrDefault:");
+                if( result_1==null)
+                     Console.WriteLine("Default value returned is null");
+
+                result_1 = connection.QueryFirstOrDefault<Student>(sql);
+                Console.WriteLine("\nGeneric QueryFirstOrDefault:");
+                if (result_1 == null)
+                    Console.WriteLine("Default value returned is null");
+
+            }
+        }
+
+        private static async Task ScalarMethods(string ConnectionString)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("\nScalarMethods\n");
+            using (var connection = new SqlConnection(ConnectionString))
+            {
+                var sql = "select count(*) from Student";
+                var count_of_students_1 = connection.ExecuteScalar(sql);//used to return one whole value
+                Console.WriteLine("Count of Students using ExecuteScalar: {0}", count_of_students_1);
+
+                var count_of_students_2 = connection.ExecuteScalar<int>(sql);
+                Console.WriteLine($"\nCount of Students using Generic ExecuteScalar: {count_of_students_2}");
+
+                var count_of_students_3 = await connection.ExecuteScalarAsync(sql);
+                Console.WriteLine("\nCount of Students using ExecuteScalarAsync: {0}", count_of_students_3);
+
+                var count_of_students_4 = await connection.ExecuteScalarAsync<int>(sql);
+                Console.WriteLine("\nCount of Students using Generic ExecuteScalarAsync: {0}", count_of_students_4);
+            }
+        }
+
+        private static void Query_with_Dapper_and_LINQ(SqlConnection sqlConnection)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("\nQuery_with_Dapper_and_LINQ\n");
+            string sql = "select * from Student where StudentID=1";
+            var student = sqlConnection.QuerySingle(sql);
+            Console.WriteLine(student.FirstName + " " + student.LastName + "\n");
+
+            sql = "select * from Student";
+            var students = sqlConnection.Query<Student>(sql);
+            foreach (Student stud in students)
+            {
+                Console.WriteLine(stud.FirstName + " " + stud.LastName);
+            }
+            //LINQ queries
+            var result = students.Where(s => s.FirstName.Equals("Bill"));//checks whether any student's firstname matches with "Bill"
+            foreach (Student stud in result)
+            {
+                Console.WriteLine("\n" + stud.LastName + "\n");
+            }
+
+            bool res = students.Any(s => s.City.Equals("Chennai"));//Compares the cityname of each student with "Chennai"
+            Console.WriteLine("Is there any student coming from Chennai? : " + res);
+
+            int Max_Mark = students.Max(s=>s.Marks);//Max method returns the maximum valu of the particular column
+            Console.WriteLine("Maximum Mark secured is " + Max_Mark);
+        }
+
+        private static void SQL_Basics(SqlConnection sqlConnection)
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("\nSQL_Basics\n");
+            SqlCommand sqlCommand = new SqlCommand("SELECT * FROM Student");
+            GetRecords(sqlConnection, sqlCommand);
+
+            sqlCommand = new SqlCommand("select * from Student where StudentID=1");
+            GetRecords(sqlConnection, sqlCommand);
+
+            sqlCommand = new SqlCommand("select * from Student where City='Coimbatore'",sqlConnection);
+            sqlConnection.Open();
+            var reader = sqlCommand.ExecuteReader();
+            DataTable dataTable = new DataTable();
+            dataTable.Load(reader);
+            foreach (DataRow datarow in dataTable.Rows)
+            {
+                Console.WriteLine(datarow["StudentID"] + " " + datarow["FirstName"] + " " + datarow["LastName"] + " " + datarow["Address"] + " " + datarow["City"]+" "+datarow["Marks"]);
+            }
+            sqlConnection.Close();
+
+            ////FETCH A SINGLE VALUE
+            sqlConnection.Open();
+            sqlCommand = new SqlCommand("select count(*) from Student");
+            sqlCommand.Connection = sqlConnection;
+            var result = sqlCommand.ExecuteScalar();
+            Console.WriteLine(result);
+            sqlConnection.Close();
+
+            ////INSERT or UPDATE A RECORD
+            string CommandText = "Update Student set Address='10, Nehru Street' where StudentID=2";
+            Console.Write(InsertOrUpdateRecord(sqlConnection, CommandText));
+
+            CommandText = "insert into Student(StudentID,LastName,FirstName,[Address],City,Marks) values(7,'Ram','Raja','19, Cross Street','CBE',76)";
+            Console.WriteLine(InsertOrUpdateRecord(sqlConnection, CommandText));
+        }
+
+        private static SqlCommand InsertOrUpdateRecord(SqlConnection sqlConnection,string CommandText)
+        {
+            SqlCommand sqlCommand;
+            sqlConnection.Open();
+            sqlCommand = new SqlCommand();
+            sqlCommand.Connection = sqlConnection;
+            sqlCommand.CommandText = CommandText;
+            sqlCommand.ExecuteNonQuery();
+            sqlConnection.Close();
+            return sqlCommand;
+        }
+       
+        private static void GetRecords(SqlConnection sqlConnection, SqlCommand sqlCommand)
+        {
+            sqlConnection.Open();
+            sqlCommand.Connection = sqlConnection;
+            SqlDataReader sqlDataReader = sqlCommand.ExecuteReader();
+            while (sqlDataReader.Read())
+            {
+                Console.WriteLine($"{sqlDataReader.GetInt32(0)} {sqlDataReader.GetString(1)} {sqlDataReader.GetString(2)} {sqlDataReader.GetString(3)} {sqlDataReader.GetString(4)} {sqlDataReader.GetInt32(5)}");
+                //Console.WriteLine(sqlDataReader.GetOrdinal("city")); //----OUTPUT:4 since city is present in 4th index 
+                //Console.WriteLine(sqlDataReader.GetName(2));//--- OUTPUT: LastName
+                //Console.WriteLine(sqlDataReader.GetValue(1));//--- OUTPUT: returns value stored in the FirstName
+                //GetName method - INPUT:int OUTPUT:string-> returns a string i.e name of the specified column
+                //GetValue method - INPUT:int OUTPUT:object->value stored in the specified column
+                //GetOrdinal method performs CASE-SENSITIVE lookupfirst. If it fails, second a CASE-INSENSITIVE search occurs.--INPUT: String , OUTPUT: Index(int)
+            }    
+            sqlConnection.Close();
+        }
+    }
+}
